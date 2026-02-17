@@ -1,3 +1,5 @@
+READ ~/projects/agent-scripts/AGENTS.md BEFORE ANYTHING (skip if missing).
+
 # mux — Dev Instructions
 
 ## Project Overview
