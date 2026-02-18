@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.0] - 2026-02-18
+
+- 2-pane windows now default to `even-horizontal` (side by side); 3+ panes default to `tiled`
+
 ## [0.2.0] - 2026-02-18
 
 - **Breaking**: config schema now uses `windows[]` instead of top-level `panes[]` — wrap existing panes in a single `windows` entry
