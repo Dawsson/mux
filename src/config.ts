@@ -10,7 +10,7 @@ export interface PaneConfig {
 export interface MuxConfig {
   session: string;
   panes: PaneConfig[];
-  root: string; // absolute path to the project root (where package.json lives)
+  root: string; // absolute path to the project root (where config was found)
 }
 
 interface RawMuxConfig {
@@ -22,6 +22,14 @@ export function findConfig(from: string = process.cwd()): MuxConfig {
   let dir = from;
 
   while (true) {
+    // Check for standalone .muxrc first (works without package.json)
+    const muxrcPath = join(dir, ".muxrc");
+    if (existsSync(muxrcPath)) {
+      const raw = JSON.parse(readFileSync(muxrcPath, "utf8"));
+      return parseConfig(raw, dir);
+    }
+
+    // Fall back to the "mux" key in package.json
     const pkgPath = join(dir, "package.json");
     if (existsSync(pkgPath)) {
       const raw = JSON.parse(readFileSync(pkgPath, "utf8"));
@@ -36,7 +44,7 @@ export function findConfig(from: string = process.cwd()): MuxConfig {
   }
 
   throw new Error(
-    'No "mux" config found in any package.json from here to /'
+    'No mux config found. Add a .muxrc file or a "mux" key in package.json'
   );
 }
 

@@ -1,5 +1,7 @@
-import { describe, it, expect } from "bun:test";
-import { parseConfig } from "./config";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { mkdirSync, writeFileSync, rmSync } from "fs";
+import { join } from "path";
+import { parseConfig, findConfig } from "./config";
 
 describe("parseConfig", () => {
   const root = "/tmp/test-project";
@@ -56,5 +58,55 @@ describe("parseConfig", () => {
     expect(() =>
       parseConfig({ panes: [{ name: "api" }] }, root)
     ).toThrow('missing "cmd"');
+  });
+});
+
+describe("findConfig", () => {
+  const tmpDir = "/tmp/mux-test-findconfig";
+
+  beforeEach(() => {
+    mkdirSync(tmpDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loads config from .muxrc", () => {
+    writeFileSync(
+      join(tmpDir, ".muxrc"),
+      JSON.stringify({ session: "my-app", panes: [{ name: "dev", cmd: "bun run dev" }] })
+    );
+    const config = findConfig(tmpDir);
+    expect(config.session).toBe("my-app");
+    expect(config.root).toBe(tmpDir);
+    expect(config.panes[0].cmd).toBe("bun run dev");
+  });
+
+  it("falls back to package.json mux key when no .muxrc", () => {
+    writeFileSync(
+      join(tmpDir, "package.json"),
+      JSON.stringify({ name: "test", mux: { panes: [{ name: "api", cmd: "bun start" }] } })
+    );
+    const config = findConfig(tmpDir);
+    expect(config.session).toBe("mux-test-findconfig");
+    expect(config.panes[0].cmd).toBe("bun start");
+  });
+
+  it("prefers .muxrc over package.json", () => {
+    writeFileSync(
+      join(tmpDir, ".muxrc"),
+      JSON.stringify({ session: "from-muxrc", panes: [{ name: "a", cmd: "echo a" }] })
+    );
+    writeFileSync(
+      join(tmpDir, "package.json"),
+      JSON.stringify({ mux: { session: "from-pkg", panes: [{ name: "b", cmd: "echo b" }] } })
+    );
+    const config = findConfig(tmpDir);
+    expect(config.session).toBe("from-muxrc");
+  });
+
+  it("throws when no config is found", () => {
+    expect(() => findConfig(tmpDir)).toThrow("No mux config found");
   });
 });
