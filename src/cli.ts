@@ -1,10 +1,12 @@
 #!/usr/bin/env bun
 import { findConfig } from "./config";
+import type { MuxConfig } from "./config";
 import {
   hasSession,
   startSession,
   killSession,
   attach,
+  listWindows,
   listPanes,
   capturePane,
   restartPane,
@@ -22,6 +24,14 @@ function loadConfig() {
   }
 }
 
+function findPane(config: MuxConfig, paneName: string): { wi: number; pi: number } | null {
+  for (let wi = 0; wi < config.windows.length; wi++) {
+    const pi = config.windows[wi].panes.findIndex((p) => p.name === paneName);
+    if (pi !== -1) return { wi, pi };
+  }
+  return null;
+}
+
 function printUsage() {
   console.log(`mux — configurable tmux session manager
 
@@ -29,7 +39,7 @@ Usage:
   mux                    Start session if not running, attach if it is
   mux start [--detach]   Start the session (--detach: don't attach)
   mux stop               Kill the session
-  mux status             Show running panes
+  mux status             Show running windows and panes
   mux logs [pane]        Capture pane output (all panes if none specified)
   mux restart [pane]     Restart a pane or all panes
 `);
@@ -67,13 +77,20 @@ if (!cmd || cmd === "start") {
     console.log(`Session "${config.session}" is not running.`);
     process.exit(0);
   }
-  const panes = listPanes(config.session);
   console.log(`Session: ${config.session}`);
-  for (let i = 0; i < panes.length; i++) {
-    const p = panes[i];
-    const name = config.panes[i]?.name ?? `pane-${i}`;
-    const active = p.active ? " (active)" : "";
-    console.log(`  [${p.index}] ${name}${active}`);
+  const tmuxWindows = listWindows(config.session);
+  for (let wi = 0; wi < tmuxWindows.length; wi++) {
+    const tw = tmuxWindows[wi];
+    const cw = config.windows[wi];
+    const activeWindow = tw.active ? " (active)" : "";
+    console.log(`  Window [${tw.index}] ${cw?.name ?? tw.name}${activeWindow}`);
+    const panes = listPanes(`${config.session}:${wi}`);
+    for (let pi = 0; pi < panes.length; pi++) {
+      const p = panes[pi];
+      const paneName = cw?.panes[pi]?.name ?? `pane-${pi}`;
+      const activePane = p.active ? " (active)" : "";
+      console.log(`    [${p.index}] ${paneName}${activePane}`);
+    }
   }
 } else if (cmd === "logs") {
   const config = loadConfig();
@@ -82,29 +99,32 @@ if (!cmd || cmd === "start") {
     process.exit(1);
   }
   const targetPane = args[1];
-  const panes = listPanes(config.session);
 
   if (targetPane) {
-    const idx = config.panes.findIndex((p) => p.name === targetPane);
-    if (idx === -1) {
+    const location = findPane(config, targetPane);
+    if (!location) {
       console.error(`Unknown pane: ${targetPane}`);
       process.exit(1);
     }
-    const pane = panes[idx];
+    const { wi, pi } = location;
+    const panes = listPanes(`${config.session}:${wi}`);
+    const pane = panes[pi];
     if (!pane) {
       console.error(`Pane ${targetPane} not found in tmux session.`);
       process.exit(1);
     }
-    const output = capturePane(pane.id);
     console.log(`=== ${targetPane} ===`);
-    console.log(output);
+    console.log(capturePane(pane.id));
   } else {
-    for (let i = 0; i < panes.length; i++) {
-      const name = config.panes[i]?.name ?? `pane-${i}`;
-      const output = capturePane(panes[i].id);
-      console.log(`=== ${name} ===`);
-      console.log(output);
-      console.log();
+    for (let wi = 0; wi < config.windows.length; wi++) {
+      const win = config.windows[wi];
+      const panes = listPanes(`${config.session}:${wi}`);
+      for (let pi = 0; pi < panes.length; pi++) {
+        const paneName = win.panes[pi]?.name ?? `pane-${pi}`;
+        console.log(`=== ${paneName} ===`);
+        console.log(capturePane(panes[pi].id));
+        console.log();
+      }
     }
   }
 } else if (cmd === "restart") {
@@ -123,9 +143,11 @@ if (!cmd || cmd === "start") {
       process.exit(1);
     }
   } else {
-    for (const pane of config.panes) {
-      restartPane(config, pane.name);
-      console.log(`Restarted pane "${pane.name}".`);
+    for (const win of config.windows) {
+      for (const pane of win.panes) {
+        restartPane(config, pane.name);
+        console.log(`Restarted pane "${pane.name}".`);
+      }
     }
   }
 } else if (cmd === "--help" || cmd === "-h" || cmd === "help") {

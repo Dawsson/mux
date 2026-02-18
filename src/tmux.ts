@@ -1,5 +1,5 @@
 import { mkdirSync, existsSync } from "fs";
-import type { MuxConfig, PaneConfig } from "./config";
+import type { MuxConfig } from "./config";
 import { join } from "path";
 
 function run(...args: string[]): string {
@@ -26,11 +26,15 @@ export function createSession(name: string, cwd: string): void {
   run("new-session", "-d", "-s", name, "-c", cwd);
 }
 
-export function splitPane(session: string, cwd: string): string {
+export function newWindow(session: string, name: string, cwd: string): void {
+  run("new-window", "-t", session, "-n", name, "-c", cwd);
+}
+
+export function splitPane(target: string, cwd: string): string {
   return run(
     "split-window",
     "-t",
-    session,
+    target,
     "-c",
     cwd,
     "-P",
@@ -39,7 +43,7 @@ export function splitPane(session: string, cwd: string): string {
   );
 }
 
-export function sendKeys(session: string, target: string, cmd: string): void {
+export function sendKeys(target: string, cmd: string): void {
   run("send-keys", "-t", target, cmd, "Enter");
 }
 
@@ -47,12 +51,12 @@ export function killSession(name: string): void {
   run("kill-session", "-t", name);
 }
 
-export function selectLayout(session: string, layout: string): void {
-  run("select-layout", "-t", session, layout);
+export function selectLayout(target: string, layout: string): void {
+  run("select-layout", "-t", target, layout);
 }
 
-export function renameWindow(session: string, name: string): void {
-  run("rename-window", "-t", session, name);
+export function renameWindow(target: string, name: string): void {
+  run("rename-window", "-t", target, name);
 }
 
 export function attach(session: string): void {
@@ -64,13 +68,30 @@ export function attach(session: string): void {
   process.exit(proc.exitCode ?? 0);
 }
 
-export function listPanes(
+export function listWindows(
   session: string
+): { index: string; name: string; active: boolean }[] {
+  const out = run(
+    "list-windows",
+    "-t",
+    session,
+    "-F",
+    "#{window_index}\t#{window_name}\t#{window_active}"
+  );
+  if (!out) return [];
+  return out.split("\n").map((line) => {
+    const [index, name, active] = line.split("\t");
+    return { index, name, active: active === "1" };
+  });
+}
+
+export function listPanes(
+  target: string
 ): { id: string; index: string; title: string; active: boolean }[] {
   const out = run(
     "list-panes",
     "-t",
-    session,
+    target,
     "-F",
     "#{pane_id}\t#{pane_index}\t#{pane_title}\t#{pane_active}"
   );
@@ -95,44 +116,52 @@ export function setupLogging(config: MuxConfig): void {
 }
 
 export function startSession(config: MuxConfig): void {
-  const { session, panes, root } = config;
+  const { session, windows, root } = config;
 
   createSession(session, root);
   setupLogging(config);
 
-  // First pane is the session window's initial pane
-  const firstPane = panes[0];
-  const firstCwd = firstPane.cwd ? join(root, firstPane.cwd) : root;
-  // Set cwd for first pane
-  sendKeys(session, `${session}:0.0`, `cd ${firstCwd}`);
-  sendKeys(session, `${session}:0.0`, firstPane.cmd);
+  for (let wi = 0; wi < windows.length; wi++) {
+    const win = windows[wi];
+    const firstCwd = win.panes[0].cwd ? join(root, win.panes[0].cwd) : root;
 
-  // Additional panes via split
-  for (let i = 1; i < panes.length; i++) {
-    const pane = panes[i];
-    const cwd = pane.cwd ? join(root, pane.cwd) : root;
-    const paneId = splitPane(session, cwd);
-    sendKeys(session, paneId, pane.cmd);
+    if (wi === 0) {
+      // Use the window auto-created with the session
+      renameWindow(`${session}:0`, win.name);
+      sendKeys(`${session}:0.0`, `cd ${firstCwd}`);
+      sendKeys(`${session}:0.0`, win.panes[0].cmd);
+    } else {
+      // Create a new window (starts in firstCwd via -c flag)
+      newWindow(session, win.name, firstCwd);
+      sendKeys(`${session}:${wi}.0`, win.panes[0].cmd);
+    }
+
+    // Additional panes via split
+    for (let pi = 1; pi < win.panes.length; pi++) {
+      const pane = win.panes[pi];
+      const cwd = pane.cwd ? join(root, pane.cwd) : root;
+      const paneId = splitPane(`${session}:${wi}`, cwd);
+      sendKeys(paneId, pane.cmd);
+    }
+
+    // Apply layout
+    selectLayout(`${session}:${wi}`, win.layout ?? "tiled");
   }
-
-  // Even layout
-  selectLayout(session, "tiled");
-  renameWindow(session, "mux");
 }
 
-export function restartPane(
-  config: MuxConfig,
-  paneName: string
-): void {
-  const paneConfig = config.panes.find((p) => p.name === paneName);
-  if (!paneConfig) throw new Error(`Unknown pane: ${paneName}`);
-
-  const panes = listPanes(config.session);
-  const idx = config.panes.findIndex((p) => p.name === paneName);
-  const target = panes[idx];
-  if (!target) throw new Error(`Pane ${paneName} not found in tmux session`);
-
-  // Send Ctrl-C then re-run command
-  run("send-keys", "-t", target.id, "C-c", "");
-  sendKeys(config.session, target.id, paneConfig.cmd);
+export function restartPane(config: MuxConfig, paneName: string): void {
+  for (let wi = 0; wi < config.windows.length; wi++) {
+    const win = config.windows[wi];
+    const pi = win.panes.findIndex((p) => p.name === paneName);
+    if (pi !== -1) {
+      const paneConfig = win.panes[pi];
+      const panes = listPanes(`${config.session}:${wi}`);
+      const target = panes[pi];
+      if (!target) throw new Error(`Pane ${paneName} not found in tmux session`);
+      run("send-keys", "-t", target.id, "C-c", "");
+      sendKeys(target.id, paneConfig.cmd);
+      return;
+    }
+  }
+  throw new Error(`Unknown pane: ${paneName}`);
 }

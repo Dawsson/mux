@@ -6,27 +6,49 @@ import { parseConfig, findConfig } from "./config";
 describe("parseConfig", () => {
   const root = "/tmp/test-project";
 
-  it("parses a valid config", () => {
+  it("parses a valid single-window config", () => {
     const config = parseConfig(
       {
         session: "my-app",
-        panes: [
-          { name: "api", cmd: "bun run dev", cwd: "packages/api" },
-          { name: "web", cmd: "bun run start", cwd: "packages/web" },
+        windows: [
+          {
+            name: "main",
+            panes: [
+              { name: "api", cmd: "bun run dev", cwd: "packages/api" },
+              { name: "web", cmd: "bun run start", cwd: "packages/web" },
+            ],
+          },
         ],
       },
       root
     );
     expect(config.session).toBe("my-app");
     expect(config.root).toBe(root);
-    expect(config.panes).toHaveLength(2);
-    expect(config.panes[0]).toEqual({ name: "api", cmd: "bun run dev", cwd: "packages/api" });
-    expect(config.panes[1]).toEqual({ name: "web", cmd: "bun run start", cwd: "packages/web" });
+    expect(config.windows).toHaveLength(1);
+    expect(config.windows[0].name).toBe("main");
+    expect(config.windows[0].panes[0]).toEqual({ name: "api", cmd: "bun run dev", cwd: "packages/api" });
+    expect(config.windows[0].panes[1]).toEqual({ name: "web", cmd: "bun run start", cwd: "packages/web" });
+  });
+
+  it("parses multiple windows", () => {
+    const config = parseConfig(
+      {
+        windows: [
+          { name: "server", panes: [{ name: "api", cmd: "bun run dev" }] },
+          { name: "tools", panes: [{ name: "db", cmd: "psql" }] },
+        ],
+      },
+      root
+    );
+    expect(config.windows).toHaveLength(2);
+    expect(config.windows[0].name).toBe("server");
+    expect(config.windows[1].name).toBe("tools");
+    expect(config.windows[1].panes[0].name).toBe("db");
   });
 
   it("defaults session to directory basename", () => {
     const config = parseConfig(
-      { panes: [{ name: "dev", cmd: "bun run dev" }] },
+      { windows: [{ name: "main", panes: [{ name: "dev", cmd: "bun run dev" }] }] },
       "/home/user/my-project"
     );
     expect(config.session).toBe("my-project");
@@ -34,29 +56,57 @@ describe("parseConfig", () => {
 
   it("allows pane without cwd", () => {
     const config = parseConfig(
-      { panes: [{ name: "dev", cmd: "bun run dev" }] },
+      { windows: [{ name: "main", panes: [{ name: "dev", cmd: "bun run dev" }] }] },
       root
     );
-    expect(config.panes[0].cwd).toBeUndefined();
+    expect(config.windows[0].panes[0].cwd).toBeUndefined();
   });
 
-  it("throws when panes is missing", () => {
-    expect(() => parseConfig({}, root)).toThrow("at least one pane");
+  it("allows window without layout", () => {
+    const config = parseConfig(
+      { windows: [{ name: "main", panes: [{ name: "dev", cmd: "bun run dev" }] }] },
+      root
+    );
+    expect(config.windows[0].layout).toBeUndefined();
   });
 
-  it("throws when panes is empty", () => {
-    expect(() => parseConfig({ panes: [] }, root)).toThrow("at least one pane");
+  it("preserves window layout", () => {
+    const config = parseConfig(
+      { windows: [{ name: "main", layout: "even-horizontal", panes: [{ name: "dev", cmd: "bun run dev" }] }] },
+      root
+    );
+    expect(config.windows[0].layout).toBe("even-horizontal");
+  });
+
+  it("throws when windows is missing", () => {
+    expect(() => parseConfig({}, root)).toThrow("at least one window");
+  });
+
+  it("throws when windows is empty", () => {
+    expect(() => parseConfig({ windows: [] }, root)).toThrow("at least one window");
+  });
+
+  it("throws when a window is missing name", () => {
+    expect(() =>
+      parseConfig({ windows: [{ panes: [{ name: "api", cmd: "bun dev" }] }] }, root)
+    ).toThrow('missing "name"');
+  });
+
+  it("throws when a window has no panes", () => {
+    expect(() =>
+      parseConfig({ windows: [{ name: "main", panes: [] }] }, root)
+    ).toThrow("at least one pane");
   });
 
   it("throws when a pane is missing name", () => {
     expect(() =>
-      parseConfig({ panes: [{ cmd: "bun run dev" }] }, root)
+      parseConfig({ windows: [{ name: "main", panes: [{ cmd: "bun run dev" }] }] }, root)
     ).toThrow('missing "name"');
   });
 
   it("throws when a pane is missing cmd", () => {
     expect(() =>
-      parseConfig({ panes: [{ name: "api" }] }, root)
+      parseConfig({ windows: [{ name: "main", panes: [{ name: "api" }] }] }, root)
     ).toThrow('missing "cmd"');
   });
 });
@@ -75,32 +125,38 @@ describe("findConfig", () => {
   it("loads config from .muxrc", () => {
     writeFileSync(
       join(tmpDir, ".muxrc"),
-      JSON.stringify({ session: "my-app", panes: [{ name: "dev", cmd: "bun run dev" }] })
+      JSON.stringify({
+        session: "my-app",
+        windows: [{ name: "main", panes: [{ name: "dev", cmd: "bun run dev" }] }],
+      })
     );
     const config = findConfig(tmpDir);
     expect(config.session).toBe("my-app");
     expect(config.root).toBe(tmpDir);
-    expect(config.panes[0].cmd).toBe("bun run dev");
+    expect(config.windows[0].panes[0].cmd).toBe("bun run dev");
   });
 
   it("falls back to package.json mux key when no .muxrc", () => {
     writeFileSync(
       join(tmpDir, "package.json"),
-      JSON.stringify({ name: "test", mux: { panes: [{ name: "api", cmd: "bun start" }] } })
+      JSON.stringify({
+        name: "test",
+        mux: { windows: [{ name: "main", panes: [{ name: "api", cmd: "bun start" }] }] },
+      })
     );
     const config = findConfig(tmpDir);
     expect(config.session).toBe("mux-test-findconfig");
-    expect(config.panes[0].cmd).toBe("bun start");
+    expect(config.windows[0].panes[0].cmd).toBe("bun start");
   });
 
   it("prefers .muxrc over package.json", () => {
     writeFileSync(
       join(tmpDir, ".muxrc"),
-      JSON.stringify({ session: "from-muxrc", panes: [{ name: "a", cmd: "echo a" }] })
+      JSON.stringify({ session: "from-muxrc", windows: [{ name: "main", panes: [{ name: "a", cmd: "echo a" }] }] })
     );
     writeFileSync(
       join(tmpDir, "package.json"),
-      JSON.stringify({ mux: { session: "from-pkg", panes: [{ name: "b", cmd: "echo b" }] } })
+      JSON.stringify({ mux: { session: "from-pkg", windows: [{ name: "main", panes: [{ name: "b", cmd: "echo b" }] }] } })
     );
     const config = findConfig(tmpDir);
     expect(config.session).toBe("from-muxrc");

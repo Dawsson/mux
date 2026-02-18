@@ -7,15 +7,21 @@ export interface PaneConfig {
   cwd?: string;
 }
 
+export interface WindowConfig {
+  name: string;
+  panes: PaneConfig[];
+  layout?: string;
+}
+
 export interface MuxConfig {
   session: string;
-  panes: PaneConfig[];
+  windows: WindowConfig[];
   root: string; // absolute path to the project root (where config was found)
 }
 
 interface RawMuxConfig {
   session?: string;
-  panes?: unknown[];
+  windows?: unknown[];
 }
 
 export function findConfig(from: string = process.cwd()): MuxConfig {
@@ -51,15 +57,22 @@ export function findConfig(from: string = process.cwd()): MuxConfig {
 export function parseConfig(raw: RawMuxConfig, root: string): MuxConfig {
   const session = raw.session || basename(root);
 
-  if (!raw.panes || !Array.isArray(raw.panes) || raw.panes.length === 0) {
-    throw new Error("mux config needs at least one pane");
+  if (!raw.windows || !Array.isArray(raw.windows) || raw.windows.length === 0) {
+    throw new Error("mux config needs at least one window");
   }
 
-  const panes: PaneConfig[] = raw.panes.map((p: any, i: number) => {
-    if (!p.name) throw new Error(`pane ${i} missing "name"`);
-    if (!p.cmd) throw new Error(`pane ${i} missing "cmd"`);
-    return { name: p.name, cmd: p.cmd, cwd: p.cwd };
+  const windows: WindowConfig[] = raw.windows.map((w: any, wi: number) => {
+    if (!w.name) throw new Error(`window ${wi} missing "name"`);
+    if (!w.panes || !Array.isArray(w.panes) || w.panes.length === 0) {
+      throw new Error(`window "${w.name}" needs at least one pane`);
+    }
+    const panes: PaneConfig[] = w.panes.map((p: any, pi: number) => {
+      if (!p.name) throw new Error(`window "${w.name}" pane ${pi} missing "name"`);
+      if (!p.cmd) throw new Error(`window "${w.name}" pane ${pi} missing "cmd"`);
+      return { name: p.name, cmd: p.cmd, cwd: p.cwd };
+    });
+    return { name: w.name, panes, layout: w.layout };
   });
 
-  return { session, panes, root };
+  return { session, windows, root };
 }
