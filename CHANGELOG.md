@@ -1,6 +1,12 @@
 # Changelog
 
-## [0.1.0] - 2026-02-18
+## [0.2.0] - 2026-02-18
+
+- **Breaking**: config schema now uses `windows[]` instead of top-level `panes[]` — wrap existing panes in a single `windows` entry
+- Added multi-window support: multiple named windows per session, each with their own panes and optional `layout`
+- Added `.muxrc` standalone config file support (takes precedence over `package.json`)
+
+## [0.1.0] - 2026-02-17
 
 - Initial release: reads `"mux"` key from nearest `package.json` and manages a named tmux session
 - Commands: `start`, `stop`, `status`, `logs [pane]`, `restart [pane]`
