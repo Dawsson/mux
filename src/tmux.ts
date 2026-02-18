@@ -145,7 +145,8 @@ export function startSession(config: MuxConfig): void {
     }
 
     // Apply layout
-    selectLayout(`${session}:${wi}`, win.layout ?? "tiled");
+    const defaultLayout = win.panes.length === 2 ? "even-horizontal" : "tiled";
+    selectLayout(`${session}:${wi}`, win.layout ?? defaultLayout);
   }
 }
 
