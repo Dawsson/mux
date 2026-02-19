@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.0] - 2026-02-19
+
+- Added `mux send <pane> <command>` to send commands to running panes
+- Added `mux send <pane> --keys <keys>` to send raw tmux keys (e.g. `C-c`, `C-d`)
+
 ## [0.3.0] - 2026-02-18
 
 - 2-pane windows now default to `even-horizontal` (side by side); 3+ panes default to `tiled`
