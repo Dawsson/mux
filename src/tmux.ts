@@ -63,7 +63,14 @@ export function renameWindow(target: string, name: string): void {
   run("rename-window", "-t", target, name);
 }
 
-export function attach(session: string): void {
+export function selectWindow(session: string, index: number): void {
+  run("select-window", "-t", `${session}:${index}`);
+}
+
+export function attach(session: string, selectWindowIndex?: number): void {
+  if (selectWindowIndex !== undefined) {
+    selectWindow(session, selectWindowIndex);
+  }
   const proc = Bun.spawnSync(["tmux", "attach", "-t", session], {
     stdin: "inherit",
     stdout: "inherit",
@@ -162,7 +169,10 @@ export function restartPane(config: MuxConfig, paneName: string): void {
       const paneConfig = win.panes[pi];
       const panes = listPanes(`${config.session}:${wi}`);
       const target = panes[pi];
-      if (!target) throw new Error(`Pane ${paneName} not found in tmux session`);
+      if (!target) {
+        console.log(`Pane "${paneName}" not found in tmux session, skipping.`);
+        return;
+      }
       run("send-keys", "-t", target.id, "C-c", "");
       sendKeys(target.id, paneConfig.cmd);
       return;
