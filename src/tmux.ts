@@ -47,6 +47,10 @@ export function sendKeys(target: string, cmd: string): void {
   run("send-keys", "-t", target, cmd, "Enter");
 }
 
+export function sendRawKeys(target: string, keys: string): void {
+  run("send-keys", "-t", target, keys);
+}
+
 export function killSession(name: string): void {
   run("kill-session", "-t", name);
 }

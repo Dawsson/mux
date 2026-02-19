@@ -10,6 +10,8 @@ import {
   listPanes,
   capturePane,
   restartPane,
+  sendKeys,
+  sendRawKeys,
 } from "./tmux";
 
 const args = process.argv.slice(2);
@@ -42,6 +44,8 @@ Usage:
   mux status             Show running windows and panes
   mux logs [pane]        Capture pane output (all panes if none specified)
   mux restart [pane]     Restart a pane or all panes
+  mux send <pane> <cmd>  Send a command to a pane (runs with Enter)
+  mux send <pane> --keys <keys>  Send raw keys (e.g. C-c, C-d)
 `);
 }
 
@@ -149,6 +153,45 @@ if (!cmd || cmd === "start") {
         console.log(`Restarted pane "${pane.name}".`);
       }
     }
+  }
+} else if (cmd === "send") {
+  const config = loadConfig();
+  if (!hasSession(config.session)) {
+    console.error(`Session "${config.session}" is not running.`);
+    process.exit(1);
+  }
+  const targetPane = args[1];
+  if (!targetPane) {
+    console.error("Usage: mux send <pane> <command> | mux send <pane> --keys <keys>");
+    process.exit(1);
+  }
+  const location = findPane(config, targetPane);
+  if (!location) {
+    console.error(`Unknown pane: ${targetPane}`);
+    process.exit(1);
+  }
+  const { wi, pi } = location;
+  const panes = listPanes(`${config.session}:${wi}`);
+  const pane = panes[pi];
+  if (!pane) {
+    console.error(`Pane ${targetPane} not found in tmux session.`);
+    process.exit(1);
+  }
+
+  if (args[2] === "--keys") {
+    const keys = args.slice(3).join(" ");
+    if (!keys) {
+      console.error("No keys specified.");
+      process.exit(1);
+    }
+    sendRawKeys(pane.id, keys);
+  } else {
+    const command = args.slice(2).join(" ");
+    if (!command) {
+      console.error("No command specified.");
+      process.exit(1);
+    }
+    sendKeys(pane.id, command);
   }
 } else if (cmd === "--help" || cmd === "-h" || cmd === "help") {
   printUsage();
