@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.0] - 2026-02-19
+
+- Added `selectWindow` config option to control which window is focused when attaching (defaults to `0`)
+- Fixed `mux restart` crashing when the tmux session has fewer panes than the config
+
 ## [0.4.0] - 2026-02-19
 
 - Added `mux send <pane> <command>` to send commands to running panes

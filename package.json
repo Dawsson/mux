@@ -1,6 +1,6 @@
 {
   "name": "@dawsson/mux",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Configurable tmux session manager for dev workflows",
   "type": "module",
   "bin": {
