@@ -17,6 +17,7 @@ const TEST_DIR = "/tmp/mux-test-send-workspace";
 const config: MuxConfig = {
   session: SESSION,
   root: TEST_DIR,
+  selectWindow: 0,
   windows: [
     {
       name: "main",

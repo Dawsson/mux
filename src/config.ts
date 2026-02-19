@@ -17,10 +17,12 @@ export interface MuxConfig {
   session: string;
   windows: WindowConfig[];
   root: string; // absolute path to the project root (where config was found)
+  selectWindow: number; // window index to focus when attaching (default: 0)
 }
 
 interface RawMuxConfig {
   session?: string;
+  selectWindow?: number;
   windows?: unknown[];
 }
 
@@ -74,5 +76,7 @@ export function parseConfig(raw: RawMuxConfig, root: string): MuxConfig {
     return { name: w.name, panes, layout: w.layout };
   });
 
-  return { session, windows, root };
+  const selectWindow = typeof raw.selectWindow === "number" ? raw.selectWindow : 0;
+
+  return { session, windows, root, selectWindow };
 }
