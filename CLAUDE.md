@@ -17,10 +17,11 @@ READ ~/projects/agent-scripts/AGENTS.md BEFORE ANYTHING (skip if missing).
 
 ```
 src/
-  config.ts     — findConfig() walks up dirs, parseConfig() validates
-  tmux.ts       — thin wrappers around tmux CLI + startSession() orchestrator
-  cli.ts        — argv parsing and command dispatch
-  mux.test.ts   — unit tests for config parsing only (don't test tmux)
+  config.ts                — findConfig() walks up dirs, parseConfig() validates
+  tmux.ts                  — thin wrappers around tmux CLI + startSession() orchestrator
+  cli.ts                   — argv parsing and command dispatch
+  mux.test.ts              — unit tests for config parsing only (don't test tmux)
+  send.integration.test.ts — integration tests (spins up real tmux sessions)
 ```
 
 ## Commands
@@ -36,5 +37,6 @@ bun run src/cli.ts   # run the CLI
 
 - Do not add a config file — all config lives in the consumer's `package.json`
 - Tmux operations stay synchronous
-- Tests cover config parsing only; tmux shell commands are not unit tested
+- Unit tests (`mux.test.ts`) cover config parsing only; tmux shell commands are not unit tested
+- Integration tests (`send.integration.test.ts`) spin up real tmux sessions to test send/keys end-to-end
 - Logs go to `/tmp/mux-<session>/`
