@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- Replaced the `tmux` backend with `zellij`
+- Added a managed-pane supervisor so `logs`, `restart`, and `send` work in detached sessions
+- Added optional `zellij.layout` config support for launch-only native layout mode
+- Narrowed `mux send --keys` to supported control keys and plain text in the Zellij backend
+
 ## [0.5.0] - 2026-02-19
 
 - Added `selectWindow` config option to control which window is focused when attaching (defaults to `0`)

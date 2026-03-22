@@ -4,39 +4,41 @@ READ ~/projects/agent-scripts/AGENTS.md BEFORE ANYTHING (skip if missing).
 
 ## Project Overview
 
-`mux` is a CLI tmux session manager. It reads a `"mux"` key from the nearest `package.json` (walking up from cwd) and manages a named tmux session with the specified panes.
+`mux` is a Bun CLI that manages `zellij` development sessions. It loads the nearest `.muxrc` or `"mux"` block in `package.json`, starts a named session, and uses a pane supervisor so detached panes still support `logs`, `restart`, and `send`.
 
 ## Tech Stack
 
-- **Runtime**: Bun (not Node.js)
+- **Runtime**: Bun
 - **Language**: TypeScript (strict mode)
-- **Test runner**: `bun test`
-- **All tmux operations**: synchronous via `Bun.spawnSync`
+- **Multiplexer**: Zellij
+- **Tests**: `bun test`
 
 ## File Structure
 
-```
+```text
 src/
-  config.ts                — findConfig() walks up dirs, parseConfig() validates
-  tmux.ts                  — thin wrappers around tmux CLI + startSession() orchestrator
   cli.ts                   — argv parsing and command dispatch
-  mux.test.ts              — unit tests for config parsing only (don't test tmux)
-  send.integration.test.ts — integration tests (spins up real tmux sessions)
+  config.ts                — config discovery and validation
+  runtime.ts               — runtime file paths, manifest/state helpers
+  zellij.ts                — zellij session orchestration and pane lookup
+  pane-supervisor.ts       — long-lived pane process supervisor
+  mux.test.ts              — config parsing tests
+  send.integration.test.ts — real zellij integration coverage
 ```
 
 ## Commands
 
 ```bash
-bun install          # install deps
-bunx tsc --noEmit    # typecheck
-bun test             # run tests
-bun run src/cli.ts   # run the CLI
+bunx tsc --noEmit
+bun test
+bun run src/cli.ts --help
 ```
 
 ## Key Constraints
 
-- Do not add a config file — all config lives in the consumer's `package.json`
-- Tmux operations stay synchronous
-- Unit tests (`mux.test.ts`) cover config parsing only; tmux shell commands are not unit tested
-- Integration tests (`send.integration.test.ts`) spin up real tmux sessions to test send/keys end-to-end
-- Logs go to `/tmp/mux-<session>/`
+- Use Bun, not npm.
+- Keep `.muxrc` and `package.json` config discovery behavior intact.
+- Managed mode (`windows[]`) is the full-feature path.
+- Native `zellij.layout` mode is launcher-only unless pane mapping is added later.
+- Runtime files live under `/tmp/mux-<session>/`.
+- Integration tests require a working `zellij` binary on `PATH`.
