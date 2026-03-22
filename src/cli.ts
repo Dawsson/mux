@@ -61,10 +61,8 @@ if (!cmd || cmd === "start") {
       console.log(`Session "${config.session}" already running.`);
     }
   } else {
-    startSession(config);
-    if (!detach) {
-      attach(config.session, config.selectWindow);
-    } else {
+    startSession(config, detach);
+    if (detach) {
       console.log(`Session "${config.session}" started (detached).`);
     }
   }

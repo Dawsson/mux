@@ -144,20 +144,41 @@ function generateLayout(config: MuxConfig): string {
     return readFileSync(config.zellij.layout, "utf8");
   }
 
+  return generateManagedLayout(config, false);
+}
+
+function getWindowSplitDirection(layout: string | undefined, paneCount: number): string {
+  if (layout === "even-horizontal" || (!layout && paneCount === 2)) {
+    return ` split_direction="Vertical"`;
+  }
+  if (layout === "even-vertical") {
+    return ` split_direction="Horizontal"`;
+  }
+  return "";
+}
+
+function generateManagedLayout(config: MuxConfig, detach: boolean): string {
+  if (config.zellij?.layout) {
+    return readFileSync(config.zellij.layout, "utf8");
+  }
+
   const tabBlocks = config.windows.map((window) => {
-    let splitDirection = "";
-    if (window.layout === "even-horizontal" || (!window.layout && window.panes.length === 2)) {
-      splitDirection = ` split_direction="Vertical"`;
-    } else if (window.layout === "even-vertical") {
-      splitDirection = ` split_direction="Horizontal"`;
-    }
+    const splitDirection = getWindowSplitDirection(window.layout, window.panes.length);
 
     const panes = window.panes
       .map(
-        (pane) =>
-          `        pane name="${escapeKdl(pane.name)}" cwd="${escapeKdl(
-            pane.cwd ? `${config.root}/${pane.cwd}` : config.root
-          )}"`
+        (pane) => {
+          const cwd = pane.cwd ? `${config.root}/${pane.cwd}` : config.root;
+          if (!detach) {
+            return `        pane name="${escapeKdl(pane.name)}" cwd="${escapeKdl(
+              cwd
+            )}" command="${escapeKdl(process.env.SHELL || "/bin/sh")}" {\n          args "-lc" "${escapeKdl(
+              pane.cmd
+            )}"\n        }`;
+          }
+
+          return `        pane name="${escapeKdl(pane.name)}" cwd="${escapeKdl(cwd)}"`;
+        }
       )
       .join("\n");
 
@@ -167,15 +188,29 @@ function generateLayout(config: MuxConfig): string {
   return `layout {\n${tabBlocks.join("\n")}\n}\n`;
 }
 
-function generateConfig(): string {
-  return `default_shell "${escapeKdl(getSupervisorPath())}"\nshow_startup_tips false\nshow_release_notes false\n`;
+function generateConfig(detach: boolean): string {
+  const lines = ["show_startup_tips false", "show_release_notes false"];
+  if (detach) {
+    lines.unshift(`default_shell "${escapeKdl(getSupervisorPath())}"`);
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 function startWithLayout(session: string, layoutPath: string, configPath: string, detach: boolean): void {
   const args = ["--config", configPath, "--layout", layoutPath, "attach"];
   if (detach) args.push("--create-background");
   args.push(session);
-  run(args, false);
+  if (detach) {
+    run(args, false);
+    return;
+  }
+
+  const proc = Bun.spawnSync(["zellij", ...args], {
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  process.exit(proc.exitCode ?? 0);
 }
 
 function waitForAssignments(config: MuxConfig, timeoutMs = 8000): PaneAssignment[] {
@@ -242,24 +277,26 @@ export function hasSession(name: string): boolean {
   }
 }
 
-export function startSession(config: MuxConfig): void {
-  initializeRuntime(config);
-  writeManifest(config);
+export function startSession(config: MuxConfig, detach = true): void {
+  if (detach) {
+    initializeRuntime(config);
+    writeManifest(config);
+  }
 
-  const layout = generateLayout(config);
+  const layout = generateManagedLayout(config, detach);
   writeFileSync(getGeneratedLayoutPath(config.session), layout, "utf8");
 
-  const generatedConfig = generateConfig();
+  const generatedConfig = generateConfig(detach);
   writeFileSync(getGeneratedConfigPath(config.session), generatedConfig, "utf8");
 
   startWithLayout(
     config.session,
     getGeneratedLayoutPath(config.session),
     getGeneratedConfigPath(config.session),
-    true
+    detach
   );
 
-  if (!config.zellij?.layout) {
+  if (detach && !config.zellij?.layout) {
     const assignments = waitForAssignments(config);
     writeAssignments(config.session, assignments);
   }
@@ -297,6 +334,10 @@ export function getPaneAssignment(config: MuxConfig, paneName: string): PaneAssi
   const livePane = metadata.panes.find((item) => item.title === paneName);
   if (!livePane) {
     throw new Error(`Pane ${paneName} not found in zellij session.`);
+  }
+
+  if (!existsSync(getAssignmentPath(config.session, livePane.id))) {
+    throw new Error("Pane automation is only available for sessions started with mux start --detach.");
   }
 
   return readAssignment(config.session, livePane.id);
@@ -350,14 +391,16 @@ export function listPanes(config: MuxConfig, windowIndex: number): {
         (item) => item.title === pane.paneName
       );
       const state = assignment
-        ? readStateForAssignment(config.session, readAssignment(config.session, assignment.id))
+        ? existsSync(getAssignmentPath(config.session, assignment.id))
+          ? readStateForAssignment(config.session, readAssignment(config.session, assignment.id))
+          : null
         : null;
       return {
         id: assignment ? String(assignment.id) : "-",
         index: String(index),
         title: pane.paneName,
         active: false,
-        status: state?.status ?? "booting",
+        status: state?.status ?? (assignment ? "interactive" : "booting"),
       };
     });
 }
