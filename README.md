@@ -64,7 +64,7 @@ If you already have a hand-written Zellij layout, `mux` can launch it directly:
 }
 ```
 
-This mode is launch-only in `v0.5.x`: `start`, `stop`, and `status` work, but `logs`, `restart`, and `send` are only available in managed mode.
+This mode is launch-only in `v0.6.x`: `start`, `stop`, and `status` work, but `logs`, `restart`, and `send` are only available in managed mode.
 
 ## Commands
 

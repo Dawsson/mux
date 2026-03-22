@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-22
+
 - Replaced the `tmux` backend with `zellij`
 - Added a managed-pane supervisor so `logs`, `restart`, and `send` work in detached sessions
 - Added optional `zellij.layout` config support for launch-only native layout mode
