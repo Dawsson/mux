@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Defaulted two-pane managed windows to side-by-side Zellij splits
+- Replaced the pipe-based pane wrapper with a PTY-backed supervisor so interactive apps keep proper terminal behavior
 
 ## [0.6.0] - 2026-03-22
 

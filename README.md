@@ -1,6 +1,6 @@
 # mux
 
-Configurable `zellij` session manager for dev workflows. `mux` reads the nearest `.muxrc` or `"mux"` key in `package.json`, starts a named Zellij session, and manages pane commands through a small supervisor process so `logs`, `restart`, and `send` still work in detached sessions.
+Configurable `zellij` session manager for dev workflows. `mux` reads the nearest `.muxrc` or `"mux"` key in `package.json`, starts a named Zellij session, and runs each managed pane through a PTY-backed supervisor so interactive apps still behave like normal terminals while `logs`, `restart`, and `send` keep working.
 
 ## Install
 
@@ -92,5 +92,5 @@ This mode is launch-only in `v0.6.x`: `start`, `stop`, and `status` work, but `l
 ## Notes
 
 - `mux` expects `zellij` to be installed and available on `PATH`.
-- Managed panes run under a `mux` supervisor process so automation works in detached sessions.
-- `send --keys` is intentionally narrower than old tmux passthrough; use `C-c`, `C-d`, `Enter`, or plain text.
+- Managed panes run under a PTY-backed `mux` supervisor, so attached sessions keep real terminal behavior.
+- `send --keys` supports common control keys plus raw text writes into the pane PTY.
