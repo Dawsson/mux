@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Defaulted two-pane managed windows to side-by-side Zellij splits
+
 ## [0.6.0] - 2026-03-22
 
 - Replaced the `tmux` backend with `zellij`

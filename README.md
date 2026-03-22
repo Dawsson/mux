@@ -48,6 +48,7 @@ This is the default, full-feature mode. `mux` generates the Zellij layout for yo
 - `session` defaults to the project directory name.
 - `selectWindow` is the tab index to focus when attaching.
 - Pane names must be unique across the whole config.
+- Two-pane windows default to side-by-side. Set `layout: "even-vertical"` if you want stacked panes instead.
 
 ### Native Zellij layout mode
 

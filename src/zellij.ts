@@ -145,6 +145,13 @@ function generateLayout(config: MuxConfig): string {
   }
 
   const tabBlocks = config.windows.map((window) => {
+    let splitDirection = "";
+    if (window.layout === "even-horizontal" || (!window.layout && window.panes.length === 2)) {
+      splitDirection = ` split_direction="Vertical"`;
+    } else if (window.layout === "even-vertical") {
+      splitDirection = ` split_direction="Horizontal"`;
+    }
+
     const panes = window.panes
       .map(
         (pane) =>
@@ -154,7 +161,7 @@ function generateLayout(config: MuxConfig): string {
       )
       .join("\n");
 
-    return `    tab name="${escapeKdl(window.name)}" {\n${panes}\n    }`;
+    return `    tab name="${escapeKdl(window.name)}"${splitDirection} {\n${panes}\n    }`;
   });
 
   return `layout {\n${tabBlocks.join("\n")}\n}\n`;
