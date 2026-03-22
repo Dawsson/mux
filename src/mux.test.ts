@@ -79,7 +79,7 @@ describe("parseConfig", () => {
   });
 
   it("throws when windows is missing", () => {
-    expect(() => parseConfig({}, root)).toThrow("at least one window");
+    expect(() => parseConfig({}, root)).toThrow("at least one window or a \"zellij.layout\"");
   });
 
   it("throws when windows is empty", () => {
@@ -108,6 +108,38 @@ describe("parseConfig", () => {
     expect(() =>
       parseConfig({ windows: [{ name: "main", panes: [{ name: "api" }] }] }, root)
     ).toThrow('missing "cmd"');
+  });
+
+  it("throws on duplicate pane names", () => {
+    expect(() =>
+      parseConfig(
+        {
+          windows: [
+            {
+              name: "main",
+              panes: [
+                { name: "api", cmd: "bun run dev" },
+                { name: "api", cmd: "bun run start" },
+              ],
+            },
+          ],
+        },
+        root
+      )
+    ).toThrow('duplicate pane name "api"');
+  });
+
+  it("parses zellij layout mode without windows", () => {
+    const config = parseConfig(
+      {
+        session: "my-app",
+        zellij: { layout: "layouts/dev.kdl" },
+      },
+      root
+    );
+    expect(config.session).toBe("my-app");
+    expect(config.windows).toEqual([]);
+    expect(config.zellij).toEqual({ layout: join(root, "layouts/dev.kdl") });
   });
 });
 

@@ -13,17 +13,25 @@ export interface WindowConfig {
   layout?: string;
 }
 
+export interface ZellijConfig {
+  layout: string;
+}
+
 export interface MuxConfig {
   session: string;
   windows: WindowConfig[];
   root: string; // absolute path to the project root (where config was found)
   selectWindow: number; // window index to focus when attaching (default: 0)
+  zellij?: ZellijConfig;
 }
 
 interface RawMuxConfig {
   session?: string;
   selectWindow?: number;
   windows?: unknown[];
+  zellij?: {
+    layout?: unknown;
+  };
 }
 
 export function findConfig(from: string = process.cwd()): MuxConfig {
@@ -58,12 +66,20 @@ export function findConfig(from: string = process.cwd()): MuxConfig {
 
 export function parseConfig(raw: RawMuxConfig, root: string): MuxConfig {
   const session = raw.session || basename(root);
+  const zellijLayout =
+    typeof raw.zellij?.layout === "string" && raw.zellij.layout.trim()
+      ? raw.zellij.layout.trim()
+      : undefined;
 
-  if (!raw.windows || !Array.isArray(raw.windows) || raw.windows.length === 0) {
-    throw new Error("mux config needs at least one window");
+  if (
+    (!raw.windows || !Array.isArray(raw.windows) || raw.windows.length === 0) &&
+    !zellijLayout
+  ) {
+    throw new Error('mux config needs at least one window or a "zellij.layout"');
   }
 
-  const windows: WindowConfig[] = raw.windows.map((w: any, wi: number) => {
+  const paneNames = new Set<string>();
+  const windows: WindowConfig[] = (raw.windows ?? []).map((w: any, wi: number) => {
     if (!w.name) throw new Error(`window ${wi} missing "name"`);
     if (!w.panes || !Array.isArray(w.panes) || w.panes.length === 0) {
       throw new Error(`window "${w.name}" needs at least one pane`);
@@ -71,6 +87,10 @@ export function parseConfig(raw: RawMuxConfig, root: string): MuxConfig {
     const panes: PaneConfig[] = w.panes.map((p: any, pi: number) => {
       if (!p.name) throw new Error(`window "${w.name}" pane ${pi} missing "name"`);
       if (!p.cmd) throw new Error(`window "${w.name}" pane ${pi} missing "cmd"`);
+      if (paneNames.has(p.name)) {
+        throw new Error(`duplicate pane name "${p.name}"`);
+      }
+      paneNames.add(p.name);
       return { name: p.name, cmd: p.cmd, cwd: p.cwd };
     });
     return { name: w.name, panes, layout: w.layout };
@@ -78,5 +98,11 @@ export function parseConfig(raw: RawMuxConfig, root: string): MuxConfig {
 
   const selectWindow = typeof raw.selectWindow === "number" ? raw.selectWindow : 0;
 
-  return { session, windows, root, selectWindow };
+  return {
+    session,
+    windows,
+    root,
+    selectWindow,
+    zellij: zellijLayout ? { layout: join(root, zellijLayout) } : undefined,
+  };
 }
