@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { basename } from "path";
 import type { MuxConfig } from "./config";
 import {
@@ -35,6 +35,11 @@ interface ZellijSessionMetadata {
   panes: ZellijPaneMetadata[];
 }
 
+interface ZellijSessionListEntry {
+  name: string;
+  exited: boolean;
+}
+
 function run(args: string[], inherit = false): string {
   const proc = Bun.spawnSync(["zellij", ...args], {
     stdin: inherit ? "inherit" : "pipe",
@@ -54,6 +59,18 @@ function run(args: string[], inherit = false): string {
 
 function escapeKdl(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+function tryRun(args: string[]): { ok: true; stdout: string } | { ok: false; error: string } {
+  try {
+    return { ok: true, stdout: run(args) };
+  } catch (error: any) {
+    return { ok: false, error: error.message };
+  }
 }
 
 function getSupervisorPath(): string {
@@ -237,19 +254,59 @@ function readStateForAssignment(session: string, assignment: PaneAssignment): Pa
   }
 }
 
-export function hasSession(name: string): boolean {
+export function parseSessionList(output: string): ZellijSessionListEntry[] {
+  return stripAnsi(output)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const name = line.split(/\s+/)[0] ?? "";
+      return {
+        name,
+        exited: line.includes("(EXITED"),
+      };
+    })
+    .filter((entry) => entry.name.length > 0);
+}
+
+function listSessions(): ZellijSessionListEntry[] {
   try {
-    const sessions = run(["list-sessions", "--short"])
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-    return sessions.includes(name);
+    return parseSessionList(run(["list-sessions"]));
   } catch {
-    return false;
+    return [];
   }
 }
 
+function waitForSessionPresence(name: string, shouldExist: boolean, timeoutMs = 3000): void {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const exists = hasAnySession(name);
+    if (exists === shouldExist) return;
+    Bun.sleepSync(100);
+  }
+
+  const state = shouldExist ? "appear" : "disappear";
+  throw new Error(`Timed out waiting for session "${name}" to ${state}.`);
+}
+
+function hasAnySession(name: string): boolean {
+  return listSessions().some((session) => session.name === name);
+}
+
+export function sessionExists(name: string): boolean {
+  return hasAnySession(name);
+}
+
+export function hasSession(name: string): boolean {
+  return listSessions().some((session) => session.name === name && !session.exited);
+}
+
 export function startSession(config: MuxConfig, detach = true): void {
+  if (hasAnySession(config.session) && !hasSession(config.session)) {
+    deleteSession(config.session);
+    waitForSessionPresence(config.session, false);
+  }
+
   initializeRuntime(config);
   writeManifest(config);
 
@@ -277,7 +334,24 @@ export function startSession(config: MuxConfig, detach = true): void {
 }
 
 export function killSession(name: string): void {
-  run(["kill-session", name]);
+  const kill = tryRun(["kill-session", name]);
+  if (!kill.ok && !kill.error.includes(`No session named ${name} found`)) {
+    throw new Error(kill.error);
+  }
+  deleteSession(name);
+  rmSync(getRuntimeDir(name), { recursive: true, force: true });
+  waitForSessionPresence(name, false);
+}
+
+export function deleteSession(name: string): void {
+  const remove = tryRun(["delete-session", "--force", name]);
+  if (
+    !remove.ok &&
+    !remove.error.includes(`No session named ${name} found`) &&
+    !remove.error.includes(`No session with the name ${name} found`)
+  ) {
+    throw new Error(remove.error);
+  }
 }
 
 export function attach(session: string, selectWindowIndex?: number): void {

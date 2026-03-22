@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { parseConfig, findConfig } from "./config";
+import { parseSessionList } from "./zellij";
 
 describe("parseConfig", () => {
   const root = "/tmp/test-project";
@@ -196,5 +197,19 @@ describe("findConfig", () => {
 
   it("throws when no config is found", () => {
     expect(() => findConfig(tmpDir)).toThrow("No mux config found");
+  });
+});
+
+describe("parseSessionList", () => {
+  it("marks exited sessions and keeps active sessions live", () => {
+    const sessions = parseSessionList(`
+\u001b[32;1mglp-agent\u001b[m [Created \u001b[35;1m2m 9s\u001b[m ago] 
+\u001b[32;1mremarkable-elephant\u001b[m [Created \u001b[35;1m4months\u001b[m ago] (\u001b[31;1mEXITED\u001b[m - attach to resurrect)
+`);
+
+    expect(sessions).toEqual([
+      { name: "glp-agent", exited: false },
+      { name: "remarkable-elephant", exited: true },
+    ]);
   });
 });

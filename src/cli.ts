@@ -3,6 +3,7 @@ import { findConfig } from "./config";
 import type { MuxConfig } from "./config";
 import {
   hasSession,
+  sessionExists,
   startSession,
   killSession,
   attach,
@@ -68,7 +69,7 @@ if (!cmd || cmd === "start") {
   }
 } else if (cmd === "stop") {
   const config = loadConfig();
-  if (hasSession(config.session)) {
+  if (sessionExists(config.session)) {
     killSession(config.session);
     console.log(`Session "${config.session}" stopped.`);
   } else {

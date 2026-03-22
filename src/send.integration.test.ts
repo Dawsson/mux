@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
-import { hasSession, killSession } from "./zellij";
+import { hasSession, killSession, sessionExists } from "./zellij";
 
 const SESSION = "mux-test-send";
 const TEST_DIR = "/tmp/mux-test-send-workspace";
@@ -88,5 +88,15 @@ describe("mux send", () => {
   test("CLI send with no command fails", () => {
     const result = runCli(["send", "shell"]);
     expect(result.exitCode).toBe(1);
+  });
+
+  test("stop removes the session instead of leaving a resurrectable cache entry", () => {
+    const stop = runCli(["stop"]);
+    expect(stop.exitCode).toBe(0);
+    expect(sessionExists(SESSION)).toBe(false);
+
+    const start = runCli(["start", "--detach"]);
+    expect(start.exitCode).toBe(0);
+    expect(hasSession(SESSION)).toBe(true);
   });
 });
