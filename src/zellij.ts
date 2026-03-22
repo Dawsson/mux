@@ -141,10 +141,10 @@ function readSessionMetadata(session: string): ZellijSessionMetadata {
 
 function getWindowSplitDirection(layout: string | undefined, paneCount: number): string {
   if (layout === "even-horizontal" || (!layout && paneCount === 2)) {
-    return ` split_direction="Vertical"`;
+    return ` split_direction="Horizontal"`;
   }
   if (layout === "even-vertical") {
-    return ` split_direction="Horizontal"`;
+    return ` split_direction="Vertical"`;
   }
   return "";
 }
