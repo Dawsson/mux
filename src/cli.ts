@@ -8,11 +8,12 @@ import {
   attach,
   listWindows,
   listPanes,
-  capturePane,
+  capturePaneLog,
   restartPane,
   sendKeys,
   sendRawKeys,
-} from "./tmux";
+  isManagedMode,
+} from "./zellij";
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -35,7 +36,7 @@ function findPane(config: MuxConfig, paneName: string): { wi: number; pi: number
 }
 
 function printUsage() {
-  console.log(`mux — configurable tmux session manager
+  console.log(`mux — configurable zellij session manager
 
 Usage:
   mux                    Start session if not running, attach if it is
@@ -45,7 +46,7 @@ Usage:
   mux logs [pane]        Capture pane output (all panes if none specified)
   mux restart [pane]     Restart a pane or all panes
   mux send <pane> <cmd>  Send a command to a pane (runs with Enter)
-  mux send <pane> --keys <keys>  Send raw keys (e.g. C-c, C-d)
+  mux send <pane> --keys <keys>  Send supported control keys (e.g. C-c, Enter)
 `);
 }
 
@@ -82,18 +83,16 @@ if (!cmd || cmd === "start") {
     process.exit(0);
   }
   console.log(`Session: ${config.session}`);
-  const tmuxWindows = listWindows(config.session);
-  for (let wi = 0; wi < tmuxWindows.length; wi++) {
-    const tw = tmuxWindows[wi];
-    const cw = config.windows[wi];
-    const activeWindow = tw.active ? " (active)" : "";
-    console.log(`  Window [${tw.index}] ${cw?.name ?? tw.name}${activeWindow}`);
-    const panes = listPanes(`${config.session}:${wi}`);
-    for (let pi = 0; pi < panes.length; pi++) {
-      const p = panes[pi];
-      const paneName = cw?.panes[pi]?.name ?? `pane-${pi}`;
-      const activePane = p.active ? " (active)" : "";
-      console.log(`    [${p.index}] ${paneName}${activePane}`);
+  const windows = listWindows(config);
+  for (let wi = 0; wi < windows.length; wi++) {
+    const window = windows[wi];
+    const activeWindow = window.active ? " (active)" : "";
+    console.log(`  Window [${window.index}] ${window.name}${activeWindow}`);
+    const panes = listPanes(config, wi);
+    for (const pane of panes) {
+      const activePane = pane.active ? " (active)" : "";
+      const status = pane.status ? ` - ${pane.status}` : "";
+      console.log(`    [${pane.index}] ${pane.title}${activePane}${status}`);
     }
   }
 } else if (cmd === "logs") {
@@ -104,29 +103,24 @@ if (!cmd || cmd === "start") {
   }
   const targetPane = args[1];
 
+  if (!isManagedMode(config)) {
+    console.error("mux logs is not available when using zellij.layout.");
+    process.exit(1);
+  }
+
   if (targetPane) {
-    const location = findPane(config, targetPane);
-    if (!location) {
+    if (!findPane(config, targetPane)) {
       console.error(`Unknown pane: ${targetPane}`);
       process.exit(1);
     }
-    const { wi, pi } = location;
-    const panes = listPanes(`${config.session}:${wi}`);
-    const pane = panes[pi];
-    if (!pane) {
-      console.error(`Pane ${targetPane} not found in tmux session.`);
-      process.exit(1);
-    }
     console.log(`=== ${targetPane} ===`);
-    console.log(capturePane(pane.id));
+    console.log(capturePaneLog(config, targetPane));
   } else {
-    for (let wi = 0; wi < config.windows.length; wi++) {
-      const win = config.windows[wi];
-      const panes = listPanes(`${config.session}:${wi}`);
-      for (let pi = 0; pi < panes.length; pi++) {
-        const paneName = win.panes[pi]?.name ?? `pane-${pi}`;
+    for (const win of config.windows) {
+      for (const pane of win.panes) {
+        const paneName = pane.name;
         console.log(`=== ${paneName} ===`);
-        console.log(capturePane(panes[pi].id));
+        console.log(capturePaneLog(config, paneName));
         console.log();
       }
     }
@@ -138,6 +132,10 @@ if (!cmd || cmd === "start") {
     process.exit(1);
   }
   const targetPane = args[1];
+  if (!isManagedMode(config)) {
+    console.error("mux restart is not available when using zellij.layout.");
+    process.exit(1);
+  }
   if (targetPane) {
     try {
       restartPane(config, targetPane);
@@ -165,16 +163,12 @@ if (!cmd || cmd === "start") {
     console.error("Usage: mux send <pane> <command> | mux send <pane> --keys <keys>");
     process.exit(1);
   }
-  const location = findPane(config, targetPane);
-  if (!location) {
-    console.error(`Unknown pane: ${targetPane}`);
+  if (!isManagedMode(config)) {
+    console.error("mux send is not available when using zellij.layout.");
     process.exit(1);
   }
-  const { wi, pi } = location;
-  const panes = listPanes(`${config.session}:${wi}`);
-  const pane = panes[pi];
-  if (!pane) {
-    console.error(`Pane ${targetPane} not found in tmux session.`);
+  if (!findPane(config, targetPane)) {
+    console.error(`Unknown pane: ${targetPane}`);
     process.exit(1);
   }
 
@@ -184,14 +178,14 @@ if (!cmd || cmd === "start") {
       console.error("No keys specified.");
       process.exit(1);
     }
-    sendRawKeys(pane.id, keys);
+    sendRawKeys(config, targetPane, keys);
   } else {
     const command = args.slice(2).join(" ");
     if (!command) {
       console.error("No command specified.");
       process.exit(1);
     }
-    sendKeys(pane.id, command);
+    sendKeys(config, targetPane, command);
   }
 } else if (cmd === "--help" || cmd === "-h" || cmd === "help") {
   printUsage();

@@ -209,7 +209,7 @@ class PaneSupervisor {
     this.shell.stdin.write(
       `printf '${START_TOKEN}::${this.commandSequence}\\n'\n. ${JSON.stringify(
         commandFile
-      )}\nstatus=$?\nprintf '${END_TOKEN}::%s\\n' \"$status\"\n`
+      )}\nmux_exit_code=$?\nprintf '${END_TOKEN}::%s\\n' \"$mux_exit_code\"\n`
     );
   }
 
