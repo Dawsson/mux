@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-03-29
+
 - Reverted the runtime backend from `zellij` back to `tmux`
 - Removed the deprecated Zellij backend and PTY supervisor code
 
