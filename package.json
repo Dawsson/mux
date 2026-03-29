@@ -1,7 +1,7 @@
 {
   "name": "@dawsson/mux",
   "version": "0.6.1",
-  "description": "Configurable zellij session manager for dev workflows",
+  "description": "Configurable tmux session manager for dev workflows",
   "type": "module",
   "bin": {
     "mux": "src/cli.ts"

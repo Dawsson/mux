@@ -1,18 +1,42 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { mkdirSync, writeFileSync, rmSync } from "fs";
-import { join } from "path";
-import { hasSession, killSession, sessionExists } from "./zellij";
+import {
+  hasSession,
+  startSession,
+  killSession,
+  listPanes,
+  capturePane,
+  sendKeys,
+  sendRawKeys,
+} from "./tmux";
+import type { MuxConfig } from "./config";
 
 const SESSION = "mux-test-send";
 const TEST_DIR = "/tmp/mux-test-send-workspace";
-const CLI = `${import.meta.dir}/cli.ts`;
+
+const config: MuxConfig = {
+  session: SESSION,
+  root: TEST_DIR,
+  selectWindow: 0,
+  windows: [
+    {
+      name: "main",
+      panes: [{ name: "shell", cmd: "echo ready" }],
+    },
+  ],
+};
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getPaneId(): string {
+  const panes = listPanes(`${SESSION}:main`);
+  return panes[0].id;
+}
+
 function runCli(args: string[]) {
-  return Bun.spawnSync(["bun", "run", CLI, ...args], {
+  return Bun.spawnSync(["bun", "run", `${import.meta.dir}/cli.ts`, ...args], {
     cwd: TEST_DIR,
     env: { ...process.env, PATH: process.env.PATH },
     stdout: "pipe",
@@ -20,16 +44,10 @@ function runCli(args: string[]) {
   });
 }
 
-function logsFor(pane: string): string {
-  const result = runCli(["logs", pane]);
-  expect(result.exitCode).toBe(0);
-  return result.stdout.toString();
-}
-
 beforeAll(() => {
   mkdirSync(TEST_DIR, { recursive: true });
   writeFileSync(
-    join(TEST_DIR, ".muxrc"),
+    `${TEST_DIR}/.muxrc`,
     JSON.stringify({
       session: SESSION,
       windows: [{ name: "main", panes: [{ name: "shell", cmd: "echo ready" }] }],
@@ -37,46 +55,67 @@ beforeAll(() => {
   );
 
   if (hasSession(SESSION)) killSession(SESSION);
-  const result = runCli(["start", "--detach"]);
-  expect(result.exitCode).toBe(0);
+  startSession(config);
 });
 
 afterAll(() => {
   if (hasSession(SESSION)) killSession(SESSION);
-  rmSync(`/tmp/mux-${SESSION}`, { recursive: true, force: true });
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
 describe("mux send", () => {
-  test("send runs a command that produces output", async () => {
-    const result = runCli(["send", "shell", "echo hello-from-test"]);
-    expect(result.exitCode).toBe(0);
-    await sleep(400);
-    expect(logsFor("shell")).toContain("hello-from-test");
+  test("sendKeys sends a command that produces output", async () => {
+    const paneId = getPaneId();
+    sendKeys(paneId, "echo hello-from-test");
+    await sleep(300);
+    const output = capturePane(paneId);
+    expect(output).toContain("hello-from-test");
   });
 
-  test("send --keys C-c interrupts a long-running command", async () => {
-    const start = runCli(["send", "shell", "sleep 60"]);
-    expect(start.exitCode).toBe(0);
+  test("sendRawKeys sends keys without Enter", async () => {
+    const paneId = getPaneId();
+    sendRawKeys(paneId, "echo partial-text");
     await sleep(300);
-
-    const interrupt = runCli(["send", "shell", "--keys", "C-c"]);
-    expect(interrupt.exitCode).toBe(0);
-    await sleep(300);
-
-    const followUp = runCli(["send", "shell", "echo after-interrupt"]);
-    expect(followUp.exitCode).toBe(0);
-    await sleep(400);
-    expect(logsFor("shell")).toContain("after-interrupt");
+    const output = capturePane(paneId);
+    expect(output).toContain("partial-text");
+    sendRawKeys(paneId, "C-c");
+    await sleep(200);
   });
 
-  test("restart reruns the configured pane command", async () => {
-    const result = runCli(["restart", "shell"]);
+  test("sendRawKeys C-c interrupts a running command", async () => {
+    const paneId = getPaneId();
+    sendKeys(paneId, "sleep 60");
+    await sleep(300);
+    sendRawKeys(paneId, "C-c");
+    await sleep(300);
+    sendKeys(paneId, "echo after-interrupt");
+    await sleep(300);
+    const output = capturePane(paneId);
+    expect(output).toContain("after-interrupt");
+  });
+
+  test("CLI send command works end-to-end", async () => {
+    const result = runCli(["send", "shell", "echo cli-send-test"]);
     expect(result.exitCode).toBe(0);
-    await sleep(400);
-    const output = logsFor("shell");
-    const readyMatches = output.match(/ready/g) ?? [];
-    expect(readyMatches.length).toBeGreaterThanOrEqual(2);
+    await sleep(300);
+    const paneId = getPaneId();
+    const output = capturePane(paneId);
+    expect(output).toContain("cli-send-test");
+  });
+
+  test("CLI send --keys works end-to-end", async () => {
+    const paneId = getPaneId();
+    sendKeys(paneId, "sleep 60");
+    await sleep(300);
+
+    const result = runCli(["send", "shell", "--keys", "C-c"]);
+    expect(result.exitCode).toBe(0);
+    await sleep(300);
+
+    sendKeys(paneId, "echo keys-test-ok");
+    await sleep(300);
+    const output = capturePane(paneId);
+    expect(output).toContain("keys-test-ok");
   });
 
   test("CLI send to unknown pane fails", () => {
@@ -88,15 +127,5 @@ describe("mux send", () => {
   test("CLI send with no command fails", () => {
     const result = runCli(["send", "shell"]);
     expect(result.exitCode).toBe(1);
-  });
-
-  test("stop removes the session instead of leaving a resurrectable cache entry", () => {
-    const stop = runCli(["stop"]);
-    expect(stop.exitCode).toBe(0);
-    expect(sessionExists(SESSION)).toBe(false);
-
-    const start = runCli(["start", "--detach"]);
-    expect(start.exitCode).toBe(0);
-    expect(hasSession(SESSION)).toBe(true);
   });
 });
